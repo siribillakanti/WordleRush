@@ -1,0 +1,126 @@
+// WordleRush Database Schema (Prisma ORM for Supabase PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id          String   @id @default(uuid())
+  displayName String
+  avatar      String   @default("avatar-1")
+  createdAt   DateTime @default(now())
+
+  roomPlayers    RoomPlayer[]
+  submittedWords SubmittedWord[]
+  playerProgress PlayerProgress[]
+  guesses        Guess[]
+
+  @@map("players")
+}
+
+model Room {
+  id           String    @id @default(uuid())
+  roomCode     String    @unique @db.VarChar(6)
+  hostPlayerId String
+  status       String    @default("LOBBY") // LOBBY, PLAYING, FINISHED, CANCELLED
+  createdAt    DateTime  @default(now())
+  startedAt    DateTime?
+  endedAt      DateTime?
+
+  roomPlayers RoomPlayer[]
+  games       Game[]
+
+  @@index([roomCode])
+  @@map("rooms")
+}
+
+model RoomPlayer {
+  id               String   @id @default(uuid())
+  roomId           String
+  playerId         String
+  sessionId        String
+  isReady          Boolean  @default(false)
+  connectionStatus String   @default("ONLINE") // ONLINE, DISCONNECTED
+  joinedAt         DateTime @default(now())
+
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, playerId])
+  @@index([roomId])
+  @@index([sessionId])
+  @@map("room_players")
+}
+
+model Game {
+  id        String    @id @default(uuid())
+  roomId    String
+  status    String    @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED
+  startTime DateTime
+  endTime   DateTime
+  createdAt DateTime  @default(now())
+
+  room           Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  submittedWords SubmittedWord[]
+  playerProgress PlayerProgress[]
+  guesses        Guess[]
+
+  @@index([roomId])
+  @@map("games")
+}
+
+model SubmittedWord {
+  id          String   @id @default(uuid())
+  gameId      String
+  playerId    String
+  word        String   @db.VarChar(5)
+  submittedAt DateTime @default(now())
+
+  game    Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  guesses Guess[]
+
+  @@unique([gameId, playerId])
+  @@index([gameId])
+  @@map("submitted_words")
+}
+
+model PlayerProgress {
+  id            String    @id @default(uuid())
+  gameId        String
+  playerId      String
+  wordsSolved   Int       @default(0)
+  totalAttempts Int       @default(0)
+  totalScore    Int       @default(0)
+  completedAt   DateTime?
+
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, playerId])
+  @@index([gameId])
+  @@map("player_progress")
+}
+
+model Guess {
+  id              String   @id @default(uuid())
+  gameId          String
+  playerId        String
+  submittedWordId String
+  guess           String   @db.VarChar(5)
+  attemptNumber   Int
+  feedback        String   // JSON string of letter feedback
+  createdAt       DateTime @default(now())
+
+  game          Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player        Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  submittedWord SubmittedWord @relation(fields: [submittedWordId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, playerId])
+  @@map("guesses")
+}
