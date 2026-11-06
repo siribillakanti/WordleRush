@@ -2,237 +2,378 @@
 
 > **Think Fast. Guess Faster.**
 
-WordleRush is a responsive, real-time multiplayer word guessing web application where friends create private rooms, submit secret five-letter words, and race to solve each other's puzzles within a shared three-minute countdown.
+A real-time multiplayer word guessing game where everyone becomes both the challenger and the solver.
+
+WordleRush takes the familiar mechanics of Wordle and turns them into a competitive multiplayer experience. Players create private rooms, submit their own secret five-letter words, and compete to solve everyone else's words before the shared timer runs out.
+
+Every player gets the same amount of time, the same number of attempts, and the same opportunity to climb the leaderboard.
+
+**Live Application:** [Play WordleRush](https://wordle-rush-neon.vercel.app)
 
 ---
 
-## 1. Features & Mechanics
+## The Idea
 
-- **Private Rooms:** Create 2–8 player rooms with unique 6-character alphanumeric codes or shareable direct invite links.
-- **Secret Word Submissions:** Each player contributes one familiar 5-letter English word. All submissions are locked and hidden on the server until the game ends.
-- **Full Multiplayer Matrix:** Every player receives challenges for all other players' words (excluding their own). Challenge order is randomized independently for each player.
-- **Synchronized Server Clock:** A single 180-second countdown controlled by the server with official start and end timestamps.
-- **Strict Wordle Feedback:** Exact two-pass duplicate letter handling (Green for correct position, Yellow for present letter within target count, Grey for absent/excess).
-- **Competitive Scoring:**
-  - Solved Word: **100 base points**
-  - Speed Bonuses:
-    - 1–2 attempts: **+30 points**
-    - 3–4 attempts: **+20 points**
-    - 5–6 attempts: **+10 points**
-  - Unsolved / Skipped Word: **0 points**
-  - Tie-breakers: Total Score → Words Solved → Lowest Total Attempts → Earliest Completion Time.
-- **Live Leaderboard:** Real-time updates without leaking guesses or secret words to competitors.
-- **Session Reconnection:** Persistent player sessions in `localStorage` allowing instant re-attachment after a page refresh or connection drop without losing progress.
-- **Dual Dictionary Word Lists:** Curated 10,875 answer words (everyday vocabulary, regular plurals, irregular plurals, geographical names like PARIS/DELHI, ordinary words that are also brand names) + comprehensive 14,133 allowed guess words (including personal names).
-- **Light & Dark Theme Modes:** CSS variable-based theming with a toggle in the navbar, automatic OS color scheme detection, and `localStorage` persistence.
-- **Wordle 3D Tile-Flip Animation:** Authentic 3D `rotateX` tile-flip keyframes with mid-point color transitions, 100ms staggered column delays, input blocking during flip, and `prefers-reduced-motion` compliance.
+Traditional Wordle is a single-player experience. I wanted to explore how its core mechanics could be transformed into a real-time multiplayer game.
 
----
+The central idea behind WordleRush is simple:
 
-## 2. Technology Stack
+**Every player creates a challenge, and every player has to solve the challenges created by everyone else.**
 
-### Frontend
-- **Framework:** React 18 with TypeScript & Vite
-- **Styling:** Tailwind CSS (midnight navy gaming aesthetic)
-- **Icons:** Lucide React
-- **Multiplayer:** Socket.IO Client
-- **Celebration:** Canvas Confetti
+Instead of competing against a predefined word, players compete against each other's vocabulary, strategy, and speed.
 
-### Backend
-- **Runtime:** Node.js & Express with TypeScript
-- **Multiplayer Server:** Socket.IO
-- **Database & ORM:** Supabase PostgreSQL with Prisma ORM
-- **Testing:** Vitest
+This creates a game where the difficulty changes with every round because the challenges come directly from the people playing.
 
----
+## How It Works
 
-## 3. Brand Identity & Design System
+### 1. Create a Room
 
-Predominantly midnight navy with restrained borders and clean typography:
+A player creates a private room and becomes its host. Other players join using a unique six-character room code.
 
-| Token | Hex | Role |
-| :--- | :--- | :--- |
-| **Midnight background** | `#101827` | Primary app canvas |
-| **Deep navy** | `#192538` | Container & card backgrounds |
-| **Elevated navy** | `#223149` | Interactive panels, key buttons |
-| **Slate** | `#354052` | Subtle borders & dividers |
-| **Primary text** | `#F5F4EF` | High-contrast headings & tiles |
-| **Secondary text** | `#AEB9C7` | Labels, captions, subtitles |
-| **Correct green** | `#6AAA64` | Wordle match / winner accents |
-| **Present yellow** | `#C9B458` | Wordle wrong position / cautions |
-| **Absent grey** | `#46505E` | Absent letter tiles / inactive keys |
+- Supports 2–8 players.
+- Rooms are private and accessible through their room codes.
+- The host controls when the game starts.
 
-### Typography
-- **Geist:** Primary typeface for headings, interface elements, and body text.
-- **IBM Plex Mono:** Monospace numerals for timers, room codes, tile letters, and scoreboard stats.
+### 2. Submit Secret Words
 
----
+Each player submits exactly one five-letter word.
 
-## 4. Word List Sources & Licensing
+The game waits until all players have submitted their words and are ready before the host can start the round.
 
-WordleRush does not copy or redistribute proprietary word lists. Both dictionary files are locally bundled under open-source and public-domain licences:
+### 3. Solve Everyone Else's Words
 
-1. **Allowed Guesses List (`backend/src/game/words/guesses.json`):**
-   - **Source:** ENABLE1 (Enhanced North American Benchmark Lexicon, Public Domain) and the BSD Unix dictionary (`/usr/share/dict/words`).
-   - **Licence:** Public Domain / BSD.
-   - **Size:** 12,500+ valid 5-letter English dictionary words.
-2. **Secret Answers List (`backend/src/game/words/answers.json`):**
-   - **Source:** Curated high-frequency English vocabulary based on Google Web Trillion Word Corpus and standard dictionary lemmas.
-   - **Licence:** CC0 / Public Domain.
-   - **Filter:** Familiar 5-letter English words. Excludes regular plurals ending in 'S' (except natural singular words like `GLASS`, `DRESS`, `FOCUS`, `CHAOS`), proper nouns, geographical names, and obscure vocabulary.
+Once the round begins, each player receives the secret words submitted by every other player, excluding their own.
+
+For example, in a four-player room:
+
+- Player A solves B, C and D.
+- Player B solves A, C and D.
+- Player C solves A, B and D.
+- Player D solves A, B and C.
+
+All challenges are played simultaneously.
+
+Each challenge provides:
+- Six attempts to find the correct word.
+- Wordle-style colour feedback.
+- A shared server-controlled countdown of 180 seconds.
+
+### 4. Compete for the Highest Score
+
+Players earn points based on the number of words they solve and how efficiently they solve them.
+
+| Achievement | Points |
+|---|---:|
+| Correctly solve a word | 100 |
+| Solve in 1–2 attempts | +30 |
+| Solve in 3–4 attempts | +20 |
+| Solve in 5–6 attempts | +10 |
+| Skip or fail to solve | 0 |
+
+The leaderboard uses the following tie-breakers:
+
+1. Total score
+2. Number of words solved
+3. Lowest total number of attempts
+4. Earliest completion time
+
+### 5. Play Multiple Rounds
+
+WordleRush supports multiple rounds within the same room.
+
+At the beginning of every round, players submit new secret words. Scores accumulate across rounds, allowing the leaderboard to reflect overall performance rather than just one successful game.
 
 ---
 
-## 5. Project Structure
+## Engineering & Architecture
 
+One of the main challenges in building WordleRush was making multiplayer gameplay consistent across multiple clients.
+
+A multiplayer game cannot rely on each browser independently deciding what is happening. Players need to see the same game state, follow the same timer, and receive consistent scoring.
+
+To address this, WordleRush follows a client-server architecture with the backend acting as the authoritative source of game state.
+
+### System Architecture
+
+```text
+                 ┌──────────────────────┐
+                 │     React Frontend   │
+                 │                      │
+                 │  Game UI             │
+                 │  Word Input          │
+                 │  Timer Display       │
+                 │  Leaderboard         │
+                 └──────────┬───────────┘
+                            │
+                     HTTP / Socket.IO
+                            │
+                 ┌──────────▼───────────┐
+                 │    Express Backend  │
+                 │                      │
+                 │  Room Management     │
+                 │  Player Sessions     │
+                 │  Game State          │
+                 │  Guess Validation    │
+                 │  Scoring Engine      │
+                 │  Timer Management    │
+                 └──────────┬───────────┘
+                            │
+                       Prisma ORM
+                            │
+                 ┌──────────▼───────────┐
+                 │  PostgreSQL Database │
+                 │                      │
+                 │  Persistent Data     │
+                 │  Game Records        │
+                 │  Room Information    │
+                 └──────────────────────┘
 ```
-WordleRush/
-├── frontend/                     # React + Vite + Tailwind frontend
-│   ├── src/
-│   │   ├── components/           # Logo, Tile, WordleGrid, Keyboard, Timer, Leaderboard, Modals
-│   │   ├── contexts/             # GameContext (Socket.IO client & state machine)
-│   │   ├── pages/                # Landing, CreateRoom, JoinRoom, Lobby, Game, Results
-│   │   ├── services/             # socket.ts, api.ts
-│   │   ├── styles/               # index.css (Tailwind directives & keyframes)
-│   │   └── types/                # TypeScript shared client interfaces
-│   ├── index.html
-│   ├── tailwind.config.js
-│   ├── vite.config.ts
-│   └── vercel.json               # Vercel deployment rewrite rules
-├── backend/                      # Express + Socket.IO + Prisma backend
-│   ├── src/
-│   │   ├── config/               # Environment & game defaults
-│   │   ├── game/                 # Word validation, feedback, scoring, GameEngine
-│   │   │   ├── words/            # answers.json & guesses.json
-│   │   │   └── __tests__/        # Vitest unit & multiplayer integration tests
-│   │   ├── services/             # roomManager.ts, db.ts
-│   │   ├── sockets/              # socketHandler.ts (Socket.IO events)
-│   │   └── index.ts              # HTTP & WebSocket entrypoint
-│   ├── prisma/
-│   │   └── schema.prisma         # Supabase PostgreSQL schema
-│   └── tsconfig.json
-├── render.yaml                   # Render deployment blueprint
-├── package.json                  # Root orchestration scripts
-└── README.md
-```
+
+### Real-Time Communication
+
+WordleRush uses Socket.IO for bidirectional communication between the frontend and backend.
+
+This allows the server to communicate game events to connected players without requiring continuous page refreshes.
+
+The real-time layer handles operations such as:
+
+- Creating and joining rooms.
+- Updating player readiness.
+- Submitting secret words.
+- Starting rounds.
+- Distributing challenges.
+- Processing guesses.
+- Updating leaderboard information.
+- Handling player disconnections and reconnections.
+
+### Server-Authoritative Gameplay
+
+A critical design decision was keeping important game logic on the backend.
+
+The server is responsible for:
+- Validating guesses.
+- Managing the game phase and round state.
+- Controlling the official game deadline.
+- Calculating scores.
+- Managing challenge completion.
+- Preventing players from accessing their own challenges.
+- Keeping room data isolated.
+
+The frontend displays the remaining time using the server-provided deadline rather than independently determining when the game ends.
+
+This helps prevent timing differences between players from affecting the outcome.
+
+Secret words and active guesses are also kept away from competing players during live gameplay.
+
+### Reconnection and State Recovery
+
+Temporary disconnections should not automatically mean losing an entire game.
+
+WordleRush includes reconnection handling so players can reconnect and recover their game state rather than restarting the room.
+
+Room isolation is also important: activity in one room should not expose or interfere with another room's game.
 
 ---
 
-## 6. Local Development Setup
+## Word Validation & Wordle Logic
+
+WordleRush maintains two separate word collections:
+
+- **Answer words:** Words that players can submit as secret challenges.
+- **Allowed guesses:** Words that players can enter while solving challenges.
+
+This separation allows the game to maintain a controlled answer vocabulary while supporting a broader range of guesses.
+
+### Duplicate Letter Handling
+
+One of the less obvious challenges in implementing Wordle-style feedback is handling repeated letters correctly.
+
+Consider a target word such as `APPLE` and a guess such as `ALLEY`.
+
+A simple character-by-character comparison is insufficient because it can incorrectly mark more letters yellow than the target actually contains.
+
+The feedback algorithm therefore needs to account for letter frequencies:
+
+1. Identify letters in their correct positions.
+2. Count the remaining unmatched letters in the target.
+3. Evaluate misplaced letters against those remaining counts.
+4. Mark letters grey when no matching occurrence remains.
+
+This ensures that repeated letters receive consistent Wordle-style feedback.
+
+---
+
+## Technology Stack
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React 18, TypeScript, Vite |
+| Styling | Tailwind CSS |
+| Icons | Lucide React |
+| Real-time communication | Socket.IO |
+| Backend | Node.js, Express.js, TypeScript |
+| Database | PostgreSQL |
+| ORM | Prisma |
+| Testing | Vitest |
+| Frontend deployment | Vercel |
+| Backend deployment | Render |
+| Database hosting | Supabase |
+
+---
+
+## Design & User Experience
+
+The interface was designed to keep attention on the actual gameplay rather than unnecessary visual effects.
+
+Some of the design decisions include:
+
+- A clean, minimal interface with a warm light theme and a contrasting dark theme.
+- Persistent theme selection.
+- Animated tile reveals inspired by traditional Wordle interactions.
+- Clear visual feedback for correct, misplaced and incorrect letters.
+- Responsive layouts for different screen sizes.
+- Reduced-motion support for accessibility.
+
+The goal was to make the interface feel like a finished game rather than a generic dashboard.
+
+---
+
+## Testing & Reliability
+
+Testing was important because multiplayer applications introduce problems that are difficult to identify through individual frontend testing alone.
+
+The project includes tests covering:
+
+- Word validation and dictionary restrictions.
+- Correct and repeated-letter feedback.
+- Scoring calculations and tie-breakers.
+- Multiplayer room interactions.
+- Challenge distribution.
+- Player reconnection.
+- Room isolation.
+
+The reported development test results included **75 passing backend tests**, along with a successful frontend production build.
+
+---
+
+## Running Locally
 
 ### Prerequisites
-- Node.js v18+ (tested on Node v20/v26)
-- npm v9+
 
-### 1. Clone & Install Dependencies
+- Node.js
+- npm
+- Git
+
+### 1. Clone the repository
 
 ```bash
-# In the project root:
+git clone https://github.com/siribillakanti/WordleRush.git
+cd WordleRush
+```
+
+### 2. Install dependencies
+
+```bash
 npm --prefix backend install
 npm --prefix frontend install
 ```
 
-### 2. Configure Environment Variables
+### 3. Configure environment variables
 
-**Backend (`backend/.env`):**
+Create `backend/.env`:
+
 ```env
 PORT=4000
 CLIENT_URL=http://localhost:5173
 NODE_ENV=development
+
 GAME_DURATION_SECONDS=180
 MAX_ATTEMPTS=6
 MAX_PLAYERS=8
 MIN_PLAYERS=2
 
-# Optional: Supabase PostgreSQL (if omitted, runs with in-memory persistence)
-# DATABASE_URL="postgresql://postgres:password@db.your-ref.supabase.co:5432/postgres"
+DATABASE_URL="your_postgresql_connection_string"
 ```
 
-**Frontend (`frontend/.env`):**
+Create `frontend/.env`:
+
 ```env
 VITE_BACKEND_URL=http://localhost:4000
 ```
 
-### 3. Run Locally
+Use your own PostgreSQL connection string. Never commit actual environment files or credentials.
 
-**Start Backend (Terminal 1):**
+### 4. Start the backend
+
+In the first terminal:
+
 ```bash
 cd backend
 npm run dev
-# Server runs on http://localhost:4000
 ```
 
-**Start Frontend (Terminal 2):**
+### 5. Start the frontend
+
+In a second terminal:
+
 ```bash
 cd frontend
 npm run dev
-# App opens at http://localhost:5173
+```
+
+Open:
+
+```text
+http://localhost:5173
 ```
 
 ---
 
-## 7. Automated Testing
+## Deployment
 
-WordleRush includes automated test suites covering:
-- Exact Wordle duplicate letter edge cases (`POPPY` vs `APPLE`, `SPEED` vs `ERASE`, `GEESE` vs `BLAME`)
-- Answer and guess list validation rules (accepting plurals `NOTES`/`BOOKS`, geo names `PARIS`/`CHINA`/`DELHI`, excluding personal names `PETER`/`SARAH` from answers while allowing them in guesses)
-- Score calculations and tie-breaking ordering
-- Multi-client real-time Socket.IO game flows (4 distinct simultaneous sockets with challenge distribution, guesses, timer synchronization, player disconnect/reconnect, and room isolation).
+WordleRush is deployed using free-tier hosting services.
 
-Run tests:
-```bash
-cd backend
-npm test
-```
+| Component | Service |
+|---|---|
+| Frontend | Vercel |
+| Backend | Render |
+| PostgreSQL Database | Supabase |
 
----
+The frontend communicates with the deployed backend through the `VITE_BACKEND_URL` environment variable.
 
-## 8. Database Setup (Supabase PostgreSQL)
+The backend connects to Supabase PostgreSQL through Prisma.
 
-WordleRush uses Prisma with PostgreSQL. It runs out-of-the-box in development with active in-memory state. To persist match history to Supabase:
-
-1. Create a free project at [supabase.com](https://supabase.com).
-2. Go to **Project Settings → Database** and copy the Connection String (URI, Port 5432 or 6543 pooler).
-3. Set `DATABASE_URL` in `backend/.env`:
-   ```env
-   DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-REF].supabase.co:5432/postgres"
-   ```
-4. Push the Prisma schema:
-   ```bash
-   cd backend
-   npx prisma db push
-   ```
+**Deployment consideration:** Free-tier hosting has resource and availability limitations. Render may put an inactive service to sleep, resulting in a delay when it starts again. Supabase Free also has inactivity-related project limitations.
 
 ---
 
-## 9. Production Deployment Guide (Free Tier)
+## What I Learned
 
-### Frontend on Vercel
-1. Import repository on [Vercel](https://vercel.com).
-2. Set **Root Directory** to `frontend`.
-3. Set **Framework Preset** to `Vite`.
-4. Add Environment Variable:
-   - `VITE_BACKEND_URL`: URL of your deployed Render backend (e.g. `https://wordlerush-backend.onrender.com`).
-5. Deploy. (The bundled `frontend/vercel.json` ensures client-side routing rewrites work properly).
+Building WordleRush involved more than implementing a word guessing algorithm.
 
-### Backend on Render
-1. Create a free **Web Service** on [Render](https://render.com).
-2. Connect your repository.
-3. Configure settings:
-   - **Root Directory:** `backend`
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm start`
-   - **Health Check Path:** `/api/health`
-4. Add Environment Variables:
-   - `NODE_ENV`: `production`
-   - `PORT`: `10000`
-   - `CLIENT_URL`: URL of your Vercel frontend (e.g. `https://wordlerush.vercel.app`)
-   - `DATABASE_URL`: Your Supabase connection string.
+Some of the most valuable engineering concepts I worked with were:
+
+- Designing a real-time client-server application.
+- Managing shared state across multiple connected clients.
+- Using Socket.IO events for multiplayer communication.
+- Implementing server-authoritative game logic.
+- Handling timers and synchronization across clients.
+- Designing room isolation and player session recovery.
+- Working with PostgreSQL and Prisma for persistent data.
+- Testing multiplayer workflows and edge cases.
+- Deploying a full-stack application across multiple hosting platforms.
+
+The project helped me understand how individual frontend interactions, backend state management, database persistence, and real-time communication come together to form a complete application.
 
 ---
 
-## 10. Free-Tier Considerations
+## Author
 
-- **Render Free Tier:** Free web services spin down after 15 minutes of inactivity. The initial wake-up may take 30–50 seconds on cold start. Once active, WebSocket connections remain uninterrupted.
-- **Supabase Free Tier:** Inactive Supabase projects pause after 1 week of zero queries. You can unpause directly from the Supabase dashboard.
-- **Zero Paid Dependencies:** WordleRush uses 100% open-source software, free-tier hosting configurations, and bundled public-domain dictionaries.
+**Siri Billakanti**  
+Computer Science & Engineering
+
+[LinkedIn](https://www.linkedin.com/in/siri-billakanti-0b798a384/)
+
+---
+
+**WordleRush — Think Fast. Guess Faster.**
