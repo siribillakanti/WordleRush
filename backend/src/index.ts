@@ -11,21 +11,21 @@ import './services/db'; // Initializes DB connection
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration for REST and WebSockets
+// Explicit allowed origins for REST and WebSockets (no wildcard subdomains)
 const allowedOrigins = [
-  config.clientUrl,
+  'https://wordle-rush-neon.vercel.app',
   'http://localhost:5173',
-  'http://localhost:3000',
   'http://127.0.0.1:5173',
+  ...(config.clientUrl && !['http://localhost:5173', 'http://127.0.0.1:5173', 'https://wordle-rush-neon.vercel.app'].includes(config.clientUrl) ? [config.clientUrl] : []),
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, curl) or matched origins
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || origin.endsWith('.render.com')) {
+    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server tests) or explicit matched origins
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(null, true); // Permissive in dev to avoid CORS friction
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
@@ -78,7 +78,7 @@ app.post('/api/words/validate-guess', (req: Request, res: Response) => {
 // ----------------------------------------------------
 const io = new SocketIOServer(server, {
   cors: {
-    origin: '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
   },

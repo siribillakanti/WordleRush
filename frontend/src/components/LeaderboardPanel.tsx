@@ -6,16 +6,22 @@ import { getAvatarById } from './AvatarPicker';
 interface LeaderboardPanelProps {
   players: PublicPlayerProgress[];
   currentPlayerId: string | null;
+  currentRound?: number;
+  totalRounds?: number;
 }
 
 export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
   players,
   currentPlayerId,
+  currentRound = 1,
+  totalRounds = 1,
 }) => {
-  // Sort players by total score (descending) then words solved
+  // Sort players by cumulative score (or current round score) descending then words solved
   const sorted = [...players].sort((a, b) => {
-    if (b.totalScore !== a.totalScore) {
-      return b.totalScore - a.totalScore;
+    const aTotal = a.cumulativeScore !== undefined ? a.cumulativeScore : a.totalScore;
+    const bTotal = b.cumulativeScore !== undefined ? b.cumulativeScore : b.totalScore;
+    if (bTotal !== aTotal) {
+      return bTotal - aTotal;
     }
     return b.wordsSolved - a.wordsSolved;
   });
@@ -26,6 +32,11 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
         <div className="flex items-center gap-2 text-primaryText font-semibold text-sm">
           <Trophy className="w-4 h-4 text-presentYellow" />
           <span>Live Standings</span>
+          {totalRounds > 1 && (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-midnight border border-slate/50 text-secondaryText">
+              R{currentRound}/{totalRounds}
+            </span>
+          )}
         </div>
         <span className="text-xs font-mono text-secondaryText">
           {players.length} Players
@@ -36,6 +47,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
         {sorted.map((player, idx) => {
           const isYou = player.playerId === currentPlayerId;
           const avatar = getAvatarById(player.avatar);
+          const totalScore = player.cumulativeScore !== undefined ? player.cumulativeScore : player.totalScore;
 
           return (
             <div
@@ -72,10 +84,10 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <div className="font-mono font-bold text-sm text-primaryText">
-                    {player.totalScore}
+                    {totalScore}
                   </div>
                   <div className="text-[10px] text-secondaryText font-mono uppercase">
-                    pts
+                    {totalRounds > 1 ? `total (+${player.totalScore})` : 'pts'}
                   </div>
                 </div>
 

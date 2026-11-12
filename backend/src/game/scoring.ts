@@ -1,4 +1,4 @@
-import { FinalPlayerResult } from './types';
+import { FinalPlayerResult, CumulativePlayerResult } from './types';
 
 /**
  * Calculates score for a solved challenge given the attempt count:
@@ -84,6 +84,64 @@ export function sortRankings(players: Array<{
       totalScore: p.totalScore,
       accuracy,
       completionTimeSeconds,
+      submittedWord: p.submittedWord,
+    };
+  });
+}
+
+/**
+ * Sorts cumulative player rankings across all rounds.
+ * Tie-breaker order:
+ * 1. Highest cumulative score
+ * 2. Most cumulative words solved
+ * 3. Lowest cumulative total attempts
+ * 4. Earliest last finish timestamp
+ */
+export function sortCumulativeRankings(players: Array<{
+  playerId: string;
+  displayName: string;
+  avatar: string;
+  currentRoundScore: number;
+  cumulativeScore: number;
+  cumulativeWordsSolved: number;
+  cumulativeTotalChallenges: number;
+  cumulativeAttempts: number;
+  roundScores: number[];
+  lastFinishedAt?: number;
+  submittedWord: string;
+}>): CumulativePlayerResult[] {
+  const sorted = [...players].sort((a, b) => {
+    if (b.cumulativeScore !== a.cumulativeScore) {
+      return b.cumulativeScore - a.cumulativeScore;
+    }
+    if (b.cumulativeWordsSolved !== a.cumulativeWordsSolved) {
+      return b.cumulativeWordsSolved - a.cumulativeWordsSolved;
+    }
+    if (a.cumulativeAttempts !== b.cumulativeAttempts) {
+      return a.cumulativeAttempts - b.cumulativeAttempts;
+    }
+    const aTime = a.lastFinishedAt || Number.MAX_SAFE_INTEGER;
+    const bTime = b.lastFinishedAt || Number.MAX_SAFE_INTEGER;
+    return aTime - bTime;
+  });
+
+  return sorted.map((p, index) => {
+    const accuracy = p.cumulativeAttempts > 0
+      ? Math.round((p.cumulativeWordsSolved / p.cumulativeTotalChallenges) * 100)
+      : 0;
+
+    return {
+      rank: index + 1,
+      playerId: p.playerId,
+      displayName: p.displayName,
+      avatar: p.avatar,
+      currentRoundScore: p.currentRoundScore,
+      cumulativeScore: p.cumulativeScore,
+      cumulativeWordsSolved: p.cumulativeWordsSolved,
+      cumulativeTotalChallenges: p.cumulativeTotalChallenges,
+      cumulativeAttempts: p.cumulativeAttempts,
+      roundScores: p.roundScores,
+      accuracy,
       submittedWord: p.submittedWord,
     };
   });

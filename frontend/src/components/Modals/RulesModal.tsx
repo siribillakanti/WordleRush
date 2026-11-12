@@ -33,11 +33,11 @@ export const RulesModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
               Word Submission
             </h3>
             <ul className="list-disc list-inside space-y-1 text-xs pl-1">
-              <li>Each player contributes exactly 1 secret five-letter English word.</li>
-              <li>Must be a valid English dictionary word (plurals, geographical names like PARIS are accepted).</li>
-              <li>Personal names used solely as names (e.g. PETER, SARAH) are not accepted as secret answers.</li>
-              <li>Duplicate words in the same room are rejected.</li>
-              <li>Words remain locked and secret once the game begins.</li>
+              <li>Each player contributes exactly 1 secret five-letter English word per round.</li>
+              <li>Must be a valid English dictionary word (regular & irregular plurals accepted).</li>
+              <li>People's names, geographical locations, and brand names are not accepted as secret answers.</li>
+              <li>Multiple players can submit the exact same word in the same room.</li>
+              <li>Words remain locked and private until each round ends.</li>
             </ul>
           </section>
 

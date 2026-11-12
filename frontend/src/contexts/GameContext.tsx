@@ -33,6 +33,8 @@ interface GameContextType {
   playerProgress: ClientPlayerProgress | null;
   publicProgress: PublicPlayerProgress[];
   finalResults: FinalGameResults | null;
+  currentRound: number;
+  totalRounds: number;
 
   // Actions
   createRoom: (name: string, avatar: string) => Promise<{ success: boolean; error?: string }>;
@@ -41,8 +43,11 @@ interface GameContextType {
   startGame: () => Promise<{ success: boolean; error?: string }>;
   submitGuess: (guess: string) => Promise<{ success: boolean; error?: string; feedback?: LetterEvaluation[]; isSolved?: boolean }>;
   skipChallenge: () => Promise<{ success: boolean; error?: string }>;
+  deferChallenge: () => Promise<{ success: boolean; error?: string }>;
+  nextRound: () => Promise<{ success: boolean; error?: string }>;
   rematch: () => void;
   kickPlayer: (targetId: string) => void;
+  updateSettings: (settings: { roundDurationSeconds?: number; totalRounds?: number }) => Promise<{ success: boolean; error?: string }>;
 
   // Notification / Alert
   notification: string | null;
@@ -76,6 +81,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isConnected, setIsConnected] = useState<boolean>(socket.connected);
   const [hasRejoinableSession, setHasRejoinableSession] = useState<boolean>(false);
 
+  const currentRound = room?.currentRound || 1;
+  const totalRounds = room?.totalRounds || 3;
+
   const showNotification = useCallback((msg: string) => {
     setNotification(msg);
     setTimeout(() => {
@@ -101,11 +109,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsConnected(false);
     };
 
-    const onRoomUpdated = ({ room }: { room: PublicRoomState }) => {
-      setRoom(room);
-      if (room.status === 'LOBBY' && screen !== 'LOBBY' && screen !== 'RESULTS') {
+    const onRoomUpdated = ({ room: updatedRoom }: { room: PublicRoomState }) => {
+      setRoom(updatedRoom);
+      if (updatedRoom.status === 'LOBBY' && screen !== 'LOBBY' && screen !== 'RESULTS') {
         setScreen('LOBBY');
-      } else if (room.status === 'CANCELLED') {
+      } else if (updatedRoom.status === 'CANCELLED') {
         showNotification('The room was cancelled by the host.');
         clearSavedSession();
         setScreen('LANDING');
@@ -124,6 +132,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       roomCode: string;
       startTime: number;
       endTime: number;
+      currentRound?: number;
+      totalRounds?: number;
       playerState: ClientPlayerProgress;
       publicProgress: PublicPlayerProgress[];
     }) => {
@@ -132,11 +142,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setPlayerProgress(data.playerState);
       setPublicProgress(data.publicProgress);
       setScreen('GAME');
-      showNotification('The race has begun! Solve all words before time expires!');
+      const roundLabel = data.currentRound && data.totalRounds
+        ? `Round ${data.currentRound} of ${data.totalRounds}`
+        : 'The race';
+      showNotification(`${roundLabel} has begun! Solve all words before time expires!`);
     };
 
-    const onGameProgress = ({ publicProgress }: { publicProgress: PublicPlayerProgress[] }) => {
-      setPublicProgress(publicProgress);
+    const onGameProgress = ({ publicProgress: progress }: { publicProgress: PublicPlayerProgress[] }) => {
+      setPublicProgress(progress);
     };
 
     const onGuessFeedback = (data: {
@@ -161,9 +174,24 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
 
+    const onChallengeDeferred = (data: { playerId: string; nextChallengeIndex: number; deferredCount: number; playerProgress?: ClientPlayerProgress }) => {
+      if (data.playerProgress) {
+        setPlayerProgress(data.playerProgress);
+      }
+    };
+
     const onGameCompleted = (results: FinalGameResults) => {
       setFinalResults(results);
       setScreen('RESULTS');
+    };
+
+    const onRoundPrepared = (data: { currentRound: number; totalRounds: number }) => {
+      setSubmittedWord('');
+      setIsReady(false);
+      setPlayerProgress(null);
+      setFinalResults(null);
+      setScreen('LOBBY');
+      showNotification(`Round ${data.currentRound} of ${data.totalRounds} is ready! Submit your new secret word.`);
     };
 
     const onPlayerKicked = ({ message }: { message: string }) => {
@@ -181,8 +209,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     socket.on('game:progress', onGameProgress);
     socket.on('guess:feedback', onGuessFeedback);
     socket.on('challenge:completed', onChallengeCompleted);
+    socket.on('challenge:deferred', onChallengeDeferred);
     socket.on('game:completed', onGameCompleted);
     socket.on('game:results', onGameCompleted);
+    socket.on('game:round_prepared', onRoundPrepared);
     socket.on('player:kicked', onPlayerKicked);
 
     return () => {
@@ -194,8 +224,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       socket.off('game:progress', onGameProgress);
       socket.off('guess:feedback', onGuessFeedback);
       socket.off('challenge:completed', onChallengeCompleted);
+      socket.off('challenge:deferred', onChallengeDeferred);
       socket.off('game:completed', onGameCompleted);
       socket.off('game:results', onGameCompleted);
+      socket.off('game:round_prepared', onRoundPrepared);
       socket.off('player:kicked', onPlayerKicked);
     };
   }, [screen, playerId, showNotification]);
@@ -238,6 +270,25 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
     });
   }, []);
+
+  const updateSettings = useCallback(async (settings: { roundDurationSeconds?: number; totalRounds?: number }) => {
+    if (!room || !playerId) return { success: false, error: 'Not in a room' };
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      socket.emit('room:update_settings', {
+        roomCode: room.roomCode,
+        hostPlayerId: playerId,
+        ...settings,
+      }, (res: any) => {
+        if (res.success) {
+          if (res.room) setRoom(res.room);
+          resolve({ success: true });
+        } else {
+          showNotification(res.error || 'Failed to update settings');
+          resolve({ success: false, error: res.error });
+        }
+      });
+    });
+  }, [room, playerId, showNotification]);
 
   const reconnectToSavedSession = useCallback(() => {
     const saved = getSavedSession();
@@ -351,10 +402,45 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (res.playerProgress) {
             setPlayerProgress(res.playerProgress);
           }
-          showNotification('Challenge skipped.');
+          showNotification('Challenge forfeited.');
           resolve({ success: true });
         } else {
           resolve({ success: false, error: res.error || 'Failed to skip challenge' });
+        }
+      });
+    });
+  }, [room, playerId, showNotification]);
+
+  const deferChallenge = useCallback(async () => {
+    if (!room || !playerId) return { success: false, error: 'Not in a room' };
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      socket.emit('challenge:defer', { roomCode: room.roomCode, playerId }, (res: any) => {
+        if (res.success) {
+          if (res.playerProgress) {
+            setPlayerProgress(res.playerProgress);
+          }
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: res.error || 'Failed to defer challenge' });
+        }
+      });
+    });
+  }, [room, playerId]);
+
+  const nextRound = useCallback(async () => {
+    if (!room || !playerId) return { success: false, error: 'Not in a room' };
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      socket.emit('game:next_round', { roomCode: room.roomCode, hostPlayerId: playerId }, (res: any) => {
+        if (res.success) {
+          setSubmittedWord('');
+          setIsReady(false);
+          setPlayerProgress(null);
+          setFinalResults(null);
+          setScreen('LOBBY');
+          resolve({ success: true });
+        } else {
+          showNotification(res.error || 'Failed to start next round');
+          resolve({ success: false, error: res.error });
         }
       });
     });
@@ -369,7 +455,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setPlayerProgress(null);
         setFinalResults(null);
         setScreen('LOBBY');
-        showNotification('Rematch started! Submit new secret words.');
+        showNotification('New match started! Submit your secret words.');
       } else {
         showNotification(res.error || 'Could not start rematch');
       }
@@ -421,14 +507,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         playerProgress,
         publicProgress,
         finalResults,
+        currentRound,
+        totalRounds,
         createRoom,
         joinRoom,
         leaveRoom,
         startGame,
         submitGuess,
         skipChallenge,
+        deferChallenge,
+        nextRound,
         rematch,
         kickPlayer,
+        updateSettings,
         notification,
         showNotification,
         isConnected,

@@ -18,7 +18,8 @@ export interface Challenge {
   targetWord: string; // secret, only on server
   attempts: GuessResult[];
   isSolved: boolean;
-  isSkipped: boolean;
+  isSkipped: boolean;   // true only for permanent forfeit (exhausted all options)
+  isDeferred: boolean;  // true when player chose "Skip for now" and will return
   isCompleted: boolean; // either solved or (skipped/exhausted)
   solvedAtAttempt?: number;
   score: number;
@@ -30,6 +31,11 @@ export interface PlayerGameState {
   avatar: string;
   challenges: Challenge[];
   currentChallengeIndex: number;
+  /**
+   * Indices of challenges the player has deferred ("skip for now").
+   * These are challenges not yet completed that the player wants to revisit.
+   */
+  deferredIndices: number[];
   wordsSolved: number;
   totalAttempts: number;
   totalScore: number;
@@ -45,6 +51,7 @@ export interface PublicPlayerProgress {
   totalChallenges: number;        // e.g. 4
   wordsSolved: number;
   totalScore: number;
+  cumulativeScore?: number;       // cumulative across all rounds
   isFinished: boolean;
   connectionStatus: 'ONLINE' | 'DISCONNECTED';
 }
@@ -58,15 +65,33 @@ export interface FinalPlayerResult {
   totalChallenges: number;
   totalAttempts: number;
   totalScore: number;
-  accuracy: number; // percentage (solved / attempts or solved / challenges)
+  accuracy: number; // percentage
   completionTimeSeconds?: number;
   submittedWord: string; // revealed at end!
+}
+
+export interface CumulativePlayerResult {
+  rank: number;
+  playerId: string;
+  displayName: string;
+  avatar: string;
+  currentRoundScore: number;
+  cumulativeScore: number;
+  cumulativeWordsSolved: number;
+  cumulativeTotalChallenges: number;
+  cumulativeAttempts: number;
+  roundScores: number[];
+  accuracy: number;
+  submittedWord: string;
 }
 
 export interface FinalGameResults {
   gameId: string;
   roomCode: string;
   durationSeconds: number;
+  currentRound: number;
+  totalRounds: number;
+  isFinalRound: boolean;
   endedReason: 'TIMER_EXPIRED' | 'ALL_PLAYERS_FINISHED' | 'HOST_ENDED';
   revealedWords: Array<{
     playerId: string;
@@ -74,4 +99,5 @@ export interface FinalGameResults {
     word: string;
   }>;
   rankings: FinalPlayerResult[];
+  cumulativeRankings: CumulativePlayerResult[];
 }

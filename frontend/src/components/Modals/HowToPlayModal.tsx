@@ -43,7 +43,7 @@ export const HowToPlayModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h3 className="font-semibold text-primaryText text-sm mb-0.5">2. Submit Your Secret Word</h3>
-              <p>Every player submits ONE familiar five-letter secret English word. No duplicate words are allowed in the room.</p>
+              <p>Every player submits ONE five-letter secret English word for the round. Multiple players may submit the exact same word independently.</p>
             </div>
           </div>
 
@@ -52,8 +52,8 @@ export const HowToPlayModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
               <Timer className="w-4 h-4 text-rose-400" />
             </div>
             <div>
-              <h3 className="font-semibold text-primaryText text-sm mb-0.5">3. 3-Minute Race Against Time</h3>
-              <p>Once started, solve everyone else's words! You never have to guess your own word. You have up to 6 attempts per challenge.</p>
+              <h3 className="font-semibold text-primaryText text-sm mb-0.5">3. Timed Multi-Round Race</h3>
+              <p>Solve all opponents' words before the round clock expires! Compete across host-configured rounds with cumulative scoring.</p>
             </div>
           </div>
 

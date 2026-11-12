@@ -11,9 +11,37 @@ import {
   CheckCircle2,
   Clock,
   Share2,
+  Settings,
+  Layers,
 } from 'lucide-react';
 import { useGame } from '../contexts/GameContext';
 import { getAvatarById } from '../components/AvatarPicker';
+
+const ROUNDS_OPTIONS = [1, 2, 3, 5];
+
+/** Convert hours/minutes/seconds to total seconds. */
+function hmsToSeconds(h: number, m: number, s: number): number {
+  return h * 3600 + m * 60 + s;
+}
+
+/** Format a total-second duration as a human-readable string, e.g. "2m 30s" or "1h 5m". */
+function formatDuration(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (s > 0 || parts.length === 0) parts.push(`${s}s`);
+  return parts.join(' ');
+}
+
+/** Clamp a numeric input to [0, max] and return an integer. */
+function clampInt(value: string, max: number): number {
+  const n = parseInt(value, 10);
+  if (isNaN(n) || n < 0) return 0;
+  return Math.min(n, max);
+}
 
 export const LobbyPage: React.FC = () => {
   const {
@@ -26,6 +54,7 @@ export const LobbyPage: React.FC = () => {
     startGame,
     leaveRoom,
     kickPlayer,
+    updateSettings,
     showNotification,
   } = useGame();
 
@@ -35,12 +64,20 @@ export const LobbyPage: React.FC = () => {
   const [submittingWord, setSubmittingWord] = useState(false);
   const [wordError, setWordError] = useState<string | null>(null);
   const [startingGame, setStartingGame] = useState(false);
+  // HMS state for custom round duration (host-only). Initialised to default 3-minute breakdown.
+  const [durationH, setDurationH] = useState(0);
+  const [durationM, setDurationM] = useState(3);
+  const [durationS, setDurationS] = useState(0);
+  const [durationError, setDurationError] = useState<string | null>(null);
 
   if (!room) return null;
 
   const currentPlayer = room.members.find((m) => m.playerId === playerId);
   const isHost = currentPlayer?.isHost || false;
   const totalPlayers = room.members.length;
+  const currentRound = room.currentRound || 1;
+  const totalRounds = room.totalRounds || 3;
+  const roundDuration = room.roundDurationSeconds || 180;
 
   const allWordsSubmitted = room.members.every((m) => m.hasSubmittedWord);
   const allReady = room.members.every((m) => m.isReady);
@@ -66,7 +103,7 @@ export const LobbyPage: React.FC = () => {
     e.preventDefault();
     const clean = inputWord.trim().toUpperCase();
     if (clean.length !== 5) {
-      setWordError('Your word must contain exactly five letters.');
+      setWordError('Please enter a five-letter word.');
       return;
     }
 
@@ -91,20 +128,45 @@ export const LobbyPage: React.FC = () => {
     }
   };
 
+  /** Apply the custom H/M/S duration chosen by the host */
+  const handleApplyDuration = () => {
+    if (!isHost || currentRound > 1) return;
+    const total = hmsToSeconds(durationH, durationM, durationS);
+    if (total < 10) {
+      setDurationError('Duration must be at least 10 seconds.');
+      return;
+    }
+    if (total > 3600) {
+      setDurationError('Duration cannot exceed 1 hour (3600 seconds).');
+      return;
+    }
+    setDurationError(null);
+    updateSettings({ roundDurationSeconds: total });
+  };
+
+  const handleRoundsChange = (rounds: number) => {
+    if (!isHost || currentRound > 1) return;
+    updateSettings({ totalRounds: rounds });
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-8 flex flex-col gap-8">
       {/* Lobby Header Card */}
       <div className="bg-deepNavy border border-slate/60 rounded-card p-6 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex flex-col items-center md:items-start text-center md:text-left">
-          <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-secondaryText mb-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono uppercase tracking-wider text-secondaryText mb-1">
             <span className="w-2 h-2 rounded-full bg-correctGreen animate-pulse"></span>
             <span>Room Lobby • {totalPlayers}/{room.maxPlayers} Players</span>
+            <span className="text-slate/60">•</span>
+            <span className="text-presentYellow font-bold">Round {currentRound} of {totalRounds}</span>
           </div>
           <h1 className="text-2xl font-bold text-primaryText tracking-tight">
-            Preparing the Race
+            {currentRound > 1 ? `Preparing Round ${currentRound} of ${totalRounds}` : 'Preparing the Race'}
           </h1>
           <p className="text-xs text-secondaryText mt-0.5">
-            Submit your secret word and get ready to challenge your opponents.
+            {currentRound > 1
+              ? `Submit a new secret word for Round ${currentRound}. Previous words do not carry over!`
+              : 'Submit your secret word and get ready to challenge your opponents.'}
           </p>
         </div>
 
@@ -137,6 +199,127 @@ export const LobbyPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Host Settings Card (Round 1 configuration or read-only summary in later rounds) */}
+      <div className="bg-deepNavy border border-slate/60 rounded-card p-5 shadow-xl flex flex-col gap-4">
+        <div className="flex items-center justify-between border-b border-slate/40 pb-2.5">
+          <div className="flex items-center gap-2 text-primaryText font-bold text-sm">
+            <Settings className="w-4 h-4 text-presentYellow" />
+            <span>Match Configuration</span>
+            {isHost && currentRound === 1 && (
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-presentYellow/20 text-presentYellow border border-presentYellow/30">
+                Host Controls
+              </span>
+            )}
+          </div>
+          <span className="text-xs font-mono text-secondaryText">
+            {formatDuration(roundDuration)} • {totalRounds} {totalRounds === 1 ? 'Round' : 'Rounds'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Round Duration Setting — custom H/M/S picker for host */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-mono text-secondaryText">
+              <Clock className="w-3.5 h-3.5 text-correctGreen" />
+              <span>Round Duration</span>
+            </div>
+            {isHost && currentRound === 1 ? (
+              <div className="flex flex-col gap-2">
+                {/* H / M / S inputs */}
+                <div className="flex items-center gap-2">
+                  {/* Hours */}
+                  <div className="flex flex-col items-center gap-0.5">
+                    <label className="text-[10px] font-mono text-secondaryText uppercase">hr</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      value={durationH}
+                      onChange={e => setDurationH(clampInt(e.target.value, 1))}
+                      className="w-14 px-2 py-1.5 rounded-btn bg-midnight border border-slate/60 text-primaryText font-mono font-bold text-center text-sm focus:border-correctGreen focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <span className="text-secondaryText font-mono text-lg mt-4">:</span>
+                  {/* Minutes */}
+                  <div className="flex flex-col items-center gap-0.5">
+                    <label className="text-[10px] font-mono text-secondaryText uppercase">min</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={durationM}
+                      onChange={e => setDurationM(clampInt(e.target.value, 59))}
+                      className="w-14 px-2 py-1.5 rounded-btn bg-midnight border border-slate/60 text-primaryText font-mono font-bold text-center text-sm focus:border-correctGreen focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <span className="text-secondaryText font-mono text-lg mt-4">:</span>
+                  {/* Seconds */}
+                  <div className="flex flex-col items-center gap-0.5">
+                    <label className="text-[10px] font-mono text-secondaryText uppercase">sec</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={durationS}
+                      onChange={e => setDurationS(clampInt(e.target.value, 59))}
+                      className="w-14 px-2 py-1.5 rounded-btn bg-midnight border border-slate/60 text-primaryText font-mono font-bold text-center text-sm focus:border-correctGreen focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplyDuration}
+                    className="mt-4 px-3 py-1.5 bg-correctGreen/90 hover:bg-correctGreen text-primaryText font-mono text-xs font-bold rounded-btn transition-colors"
+                  >
+                    Set
+                  </button>
+                </div>
+                {durationError && (
+                  <div className="text-[11px] text-rose-400 font-mono">{durationError}</div>
+                )}
+                <div className="text-[11px] font-mono text-secondaryText">
+                  Current: <span className="text-primaryText font-semibold">{formatDuration(roundDuration)}</span>
+                  {' '}({roundDuration}s) · Max 1 hour
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs font-mono text-primaryText font-semibold px-3 py-2 rounded-btn bg-midnight border border-slate/40">
+                {formatDuration(roundDuration)} per round
+              </div>
+            )}
+          </div>
+
+          {/* Number of Rounds Setting */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-mono text-secondaryText">
+              <Layers className="w-3.5 h-3.5 text-blue-400" />
+              <span>Total Match Rounds</span>
+            </div>
+            {isHost && currentRound === 1 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {ROUNDS_OPTIONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => handleRoundsChange(r)}
+                    className={`px-3 py-1.5 rounded-btn text-xs font-mono transition-colors border ${
+                      totalRounds === r
+                        ? 'bg-correctGreen text-primaryText border-correctGreen font-bold'
+                        : 'bg-midnight hover:bg-elevatedNavy border-slate/60 text-secondaryText'
+                    }`}
+                  >
+                    {r} {r === 1 ? 'Round' : 'Rounds'}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs font-mono text-primaryText font-semibold px-3 py-2 rounded-btn bg-midnight border border-slate/40">
+                {totalRounds} {totalRounds === 1 ? 'round' : 'rounds'} total (Currently Round {currentRound})
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Column: Secret Word Submission Card */}
         <div className="md:col-span-1 flex flex-col gap-4">
@@ -146,7 +329,7 @@ export const LobbyPage: React.FC = () => {
               <span>Your Secret Word</span>
             </div>
             <p className="text-xs text-secondaryText leading-relaxed mb-4">
-              Enter ONE familiar five-letter English word. All opponents will race to solve this word.
+              Enter ONE familiar five-letter English word for <strong>Round {currentRound}</strong>. All opponents will race to solve this word.
             </p>
 
             <form onSubmit={handleWordSubmit} className="flex flex-col gap-3">
@@ -342,12 +525,12 @@ export const LobbyPage: React.FC = () => {
                   {startingGame ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Starting Race...</span>
+                      <span>Starting Round {currentRound}...</span>
                     </>
                   ) : (
                     <>
                       <Play className="w-5 h-5 fill-current" />
-                      <span>Start Game</span>
+                      <span>Start Round {currentRound} of {totalRounds}</span>
                     </>
                   )}
                 </button>
@@ -366,7 +549,7 @@ export const LobbyPage: React.FC = () => {
               <div className="mt-6 pt-4 border-t border-slate/40 text-center">
                 <div className="inline-flex items-center gap-2 text-xs font-mono text-secondaryText">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-presentYellow" />
-                  <span>Waiting for the host to start the game...</span>
+                  <span>Waiting for the host to start Round {currentRound}...</span>
                 </div>
               </div>
             )}

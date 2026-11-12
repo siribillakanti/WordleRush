@@ -17,6 +17,7 @@ export interface SanitizedChallenge {
   index: number;
   isSolved: boolean;
   isSkipped: boolean;
+  isDeferred: boolean;
   isCompleted: boolean;
   attempts: GuessResult[];
   score: number;
@@ -30,6 +31,8 @@ export interface ClientPlayerProgress {
   currentChallengeIndex: number;
   totalChallenges: number;
   challenges: SanitizedChallenge[];
+  deferredIndices: number[];
+  deferredCount: number;
   wordsSolved: number;
   totalAttempts: number;
   totalScore: number;
@@ -45,6 +48,7 @@ export interface PublicPlayerProgress {
   totalChallenges: number;
   wordsSolved: number;
   totalScore: number;
+  cumulativeScore?: number;
   isFinished: boolean;
   connectionStatus: 'ONLINE' | 'DISCONNECTED';
 }
@@ -59,6 +63,21 @@ export interface PublicRoomMember {
   hasSubmittedWord: boolean;
 }
 
+export interface CumulativePlayerResult {
+  rank: number;
+  playerId: string;
+  displayName: string;
+  avatar: string;
+  currentRoundScore: number;
+  cumulativeScore: number;
+  cumulativeWordsSolved: number;
+  cumulativeTotalChallenges: number;
+  cumulativeAttempts: number;
+  roundScores: number[];
+  accuracy: number;
+  submittedWord: string;
+}
+
 export interface PublicRoomState {
   roomCode: string;
   hostPlayerId: string;
@@ -68,6 +87,11 @@ export interface PublicRoomState {
   minPlayers: number;
   maxPlayers: number;
   gameDurationSeconds: number;
+  roundDurationSeconds: number;
+  totalRounds: number;
+  currentRound: number;
+  isFinalRound: boolean;
+  cumulativeRankings?: CumulativePlayerResult[];
 }
 
 export interface FinalPlayerResult {
@@ -88,6 +112,9 @@ export interface FinalGameResults {
   gameId: string;
   roomCode: string;
   durationSeconds: number;
+  currentRound: number;
+  totalRounds: number;
+  isFinalRound: boolean;
   endedReason: 'TIMER_EXPIRED' | 'ALL_PLAYERS_FINISHED' | 'HOST_ENDED';
   revealedWords: Array<{
     playerId: string;
@@ -95,6 +122,7 @@ export interface FinalGameResults {
     word: string;
   }>;
   rankings: FinalPlayerResult[];
+  cumulativeRankings: CumulativePlayerResult[];
 }
 
 export type ScreenState = 'LANDING' | 'CREATE_ROOM' | 'JOIN_ROOM' | 'LOBBY' | 'GAME' | 'RESULTS';

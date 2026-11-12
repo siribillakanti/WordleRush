@@ -77,20 +77,26 @@ describe('Real-Time Multiplayer End-to-End Test (4 Players & Room Isolation)', (
     });
     const p4Id = join4.playerId;
 
-    // 4. Test duplicate word submission rejection
+    // 4. Test duplicate word submission (Part 4: ALLOW duplicate secret words)
     const submitP1: any = await new Promise((resolve) => {
       client1.emit('word:submit', { roomCode, playerId: p1Id, word: 'APPLE' }, resolve);
     });
     expect(submitP1.success).toBe(true);
 
-    // Client 2 attempts to submit the same word 'apple' -> must be rejected!
+    // Client 2 submits the same word 'apple' -> MUST be accepted per Part 4 requirement!
     const duplicateSubmit: any = await new Promise((resolve) => {
       client2.emit('word:submit', { roomCode, playerId: p2Id, word: 'apple' }, resolve);
     });
-    expect(duplicateSubmit.success).toBe(false);
-    expect(duplicateSubmit.error).toContain('already submitted');
+    expect(duplicateSubmit.success).toBe(true);
 
-    // Submit unique valid words for everyone
+    // Test invalid word rejection (e.g. invalid length)
+    const invalidSubmit: any = await new Promise((resolve) => {
+      client2.emit('word:submit', { roomCode, playerId: p2Id, word: 'TOOLONG' }, resolve);
+    });
+    expect(invalidSubmit.success).toBe(false);
+    expect(invalidSubmit.error).toContain('five-letter');
+
+    // Submit valid words for everyone
     await new Promise((resolve) => {
       client2.emit('word:submit', { roomCode, playerId: p2Id, word: 'GRAPE' }, resolve);
     });

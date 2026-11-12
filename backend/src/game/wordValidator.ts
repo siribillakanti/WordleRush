@@ -18,11 +18,17 @@ export interface ValidationResult {
  */
 function normalizeWord(raw: string): { clean: string; error?: string } {
   if (!raw || typeof raw !== 'string') {
-    return { clean: '', error: 'Your word must contain exactly five letters.' };
+    return { clean: '', error: 'Please enter a five-letter word.' };
   }
   const clean = raw.trim().toUpperCase();
-  if (clean.length !== 5 || !/^[A-Z]{5}$/.test(clean)) {
-    return { clean, error: 'Your word must contain exactly five letters.' };
+  if (!clean) {
+    return { clean: '', error: 'Please enter a five-letter word.' };
+  }
+  if (/[^A-Z]/.test(clean)) {
+    return { clean, error: 'Your word contains invalid characters.' };
+  }
+  if (clean.length !== 5) {
+    return { clean, error: 'Please enter a five-letter word.' };
   }
   return { clean };
 }
@@ -42,7 +48,7 @@ export function validateSecretWord(rawWord: string): ValidationResult {
     return {
       valid: false,
       cleanWord: word,
-      error: "This word isn't in our answer dictionary.",
+      error: 'This word is not in the accepted word list.',
     };
   }
 
@@ -64,7 +70,7 @@ export function validateGuess(rawGuess: string): ValidationResult {
     return {
       valid: false,
       cleanWord: word,
-      error: 'Not in the accepted word list. Try another word.',
+      error: 'This word is not in the accepted word list.',
     };
   }
 

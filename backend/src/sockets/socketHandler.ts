@@ -74,7 +74,31 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 3. SUBMIT SECRET WORD (Lobby phase)
+    // 3. UPDATE ROOM SETTINGS (Host only)
+    // ----------------------------------------------------
+    socket.on('room:update_settings', ({ roomCode, hostPlayerId, roundDurationSeconds, totalRounds }: {
+      roomCode: string;
+      hostPlayerId: string;
+      roundDurationSeconds?: number;
+      totalRounds?: number;
+    }, callback) => {
+      try {
+        const code = roomCode.toUpperCase();
+        const result = roomManager.updateSettings(code, hostPlayerId, { roundDurationSeconds, totalRounds });
+        if (!result.success) {
+          if (callback) callback({ success: false, error: result.error });
+          return;
+        }
+
+        io.to(code).emit('room:updated', { room: result.room });
+        if (callback) callback({ success: true, room: result.room });
+      } catch (err: any) {
+        if (callback) callback({ success: false, error: err.message });
+      }
+    });
+
+    // ----------------------------------------------------
+    // 4. SUBMIT SECRET WORD (Lobby phase)
     // ----------------------------------------------------
     socket.on('word:submit', ({ roomCode, playerId, word }: {
       roomCode: string;
@@ -105,7 +129,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 4. READY TOGGLE
+    // 5. READY TOGGLE
     // ----------------------------------------------------
     socket.on('player:ready', ({ roomCode, playerId, isReady }: {
       roomCode: string;
@@ -131,7 +155,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 5. START GAME
+    // 6. START GAME / ROUND
     // ----------------------------------------------------
     socket.on('game:start', ({ roomCode, hostPlayerId }: {
       roomCode: string;
@@ -140,7 +164,6 @@ export function setupSocketHandlers(io: Server) {
       try {
         const code = roomCode.toUpperCase();
         const startResult = roomManager.startGame(code, hostPlayerId, (results) => {
-          // Timer expired callback
           io.to(code).emit('game:completed', results);
           io.to(code).emit('game:results', results);
         });
@@ -165,6 +188,8 @@ export function setupSocketHandlers(io: Server) {
             startTime: startResult.startTime,
             endTime: startResult.endTime,
             durationSeconds: room.gameEngine.durationSeconds,
+            currentRound: startResult.currentRound,
+            totalRounds: startResult.totalRounds,
             playerState,
             publicProgress: room.gameEngine.getPublicRoomProgress(),
           });
@@ -177,7 +202,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 6. SUBMIT IN-GAME GUESS
+    // 7. SUBMIT IN-GAME GUESS
     // ----------------------------------------------------
     socket.on('guess:submit', ({ roomCode, playerId, guess }: {
       roomCode: string;
@@ -219,15 +244,8 @@ export function setupSocketHandlers(io: Server) {
           });
         }
 
-        // Check if game ended because all finished
-        if (room.gameEngine.getIsEnded()) {
-          const finalResults = room.gameEngine.compileResults();
-          room.status = 'FINISHED';
-          if (room.timerTimeout) clearTimeout(room.timerTimeout);
-          io.to(room.roomCode).emit('game:completed', finalResults);
-          io.to(room.roomCode).emit('game:results', finalResults);
-        }
-
+        // Note: If game ended because all finished, engine.onEnd automatically triggers
+        // finishCurrentRound which broadcasts game:completed to all clients.
         if (callback) callback(result);
       } catch (err: any) {
         if (callback) callback({ success: false, error: err.message });
@@ -235,7 +253,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 7. SKIP CHALLENGE
+    // 8. SKIP CHALLENGE (permanent forfeit — 0 points)
     // ----------------------------------------------------
     socket.on('challenge:skip', ({ roomCode, playerId }: {
       roomCode: string;
@@ -264,13 +282,44 @@ export function setupSocketHandlers(io: Server) {
           publicProgress: room.gameEngine.getPublicRoomProgress(),
         });
 
-        if (room.gameEngine.getIsEnded()) {
-          const finalResults = room.gameEngine.compileResults();
-          room.status = 'FINISHED';
-          if (room.timerTimeout) clearTimeout(room.timerTimeout);
-          io.to(room.roomCode).emit('game:completed', finalResults);
-          io.to(room.roomCode).emit('game:results', finalResults);
+        if (callback) callback(result);
+      } catch (err: any) {
+        if (callback) callback({ success: false, error: err.message });
+      }
+    });
+
+    // ----------------------------------------------------
+    // 8b. DEFER CHALLENGE ("Skip for now" — no guess consumed, revisit later)
+    // ----------------------------------------------------
+    socket.on('challenge:defer', ({ roomCode, playerId }: {
+      roomCode: string;
+      playerId: string;
+    }, callback) => {
+      try {
+        const room = roomManager.getRoom(roomCode.toUpperCase());
+        if (!room || !room.gameEngine) {
+          if (callback) callback({ success: false, error: 'Game not active' });
+          return;
         }
+
+        const result = room.gameEngine.deferChallenge(playerId);
+        if (!result.success) {
+          if (callback) callback({ success: false, error: result.error });
+          return;
+        }
+
+        // Notify the deferring player of their new state (private)
+        socket.emit('challenge:deferred', {
+          playerId,
+          nextChallengeIndex: result.nextChallengeIndex,
+          deferredCount: result.deferredCount,
+          playerProgress: result.playerProgress,
+        });
+
+        // Broadcast general progress (deferred count not revealed to others)
+        io.to(room.roomCode).emit('game:progress', {
+          publicProgress: room.gameEngine.getPublicRoomProgress(),
+        });
 
         if (callback) callback(result);
       } catch (err: any) {
@@ -279,7 +328,33 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 8. REMATCH / PLAY AGAIN
+    // 9. PROCEED TO NEXT ROUND (Host only)
+    // ----------------------------------------------------
+    socket.on('game:next_round', ({ roomCode, hostPlayerId }: {
+      roomCode: string;
+      hostPlayerId: string;
+    }, callback) => {
+      try {
+        const code = roomCode.toUpperCase();
+        const result = roomManager.nextRound(code, hostPlayerId);
+        if (!result.success) {
+          if (callback) callback({ success: false, error: result.error });
+          return;
+        }
+
+        io.to(code).emit('game:round_prepared', {
+          currentRound: result.currentRound,
+          totalRounds: result.totalRounds,
+        });
+        io.to(code).emit('room:updated', { room: result.room });
+        if (callback) callback({ success: true, room: result.room });
+      } catch (err: any) {
+        if (callback) callback({ success: false, error: err.message });
+      }
+    });
+
+    // ----------------------------------------------------
+    // 10. REMATCH / PLAY AGAIN (Starts fresh match)
     // ----------------------------------------------------
     socket.on('game:rematch', ({ roomCode }: { roomCode: string }, callback) => {
       try {
@@ -297,7 +372,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 9. RECONNECT / STATE RECOVERY
+    // 11. RECONNECT / STATE RECOVERY
     // ----------------------------------------------------
     socket.on('player:reconnect', ({ sessionId, roomCode }: {
       sessionId: string;
@@ -346,12 +421,14 @@ export function setupSocketHandlers(io: Server) {
             startTime: room.gameEngine.startTime,
             endTime: room.gameEngine.endTime,
             durationSeconds: room.gameEngine.durationSeconds,
+            currentRound: room.currentRound,
+            totalRounds: room.totalRounds,
             playerState: room.gameEngine.getSanitizedPlayerState(matchedMember.playerId),
             publicProgress: room.gameEngine.getPublicRoomProgress(),
           };
-        } else if (room.status === 'FINISHED' && room.gameEngine) {
+        } else if (room.status === 'FINISHED' && room.lastResults) {
           currentGameState = {
-            results: room.gameEngine.compileResults(),
+            results: room.lastResults,
           };
         }
 
@@ -371,7 +448,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 10. LEAVE ROOM
+    // 12. LEAVE ROOM
     // ----------------------------------------------------
     socket.on('room:leave', ({ roomCode, playerId }: { roomCode: string; playerId: string }, callback) => {
       try {
@@ -392,7 +469,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 11. REMOVE PLAYER (Host kick)
+    // 13. REMOVE PLAYER (Host kick)
     // ----------------------------------------------------
     socket.on('player:remove', ({ roomCode, hostPlayerId, targetPlayerId }: {
       roomCode: string;
@@ -422,7 +499,7 @@ export function setupSocketHandlers(io: Server) {
     });
 
     // ----------------------------------------------------
-    // 12. DISCONNECT
+    // 14. DISCONNECT
     // ----------------------------------------------------
     socket.on('disconnect', () => {
       const { roomCode, playerId, publicState } = roomManager.handleDisconnect(socket.id);

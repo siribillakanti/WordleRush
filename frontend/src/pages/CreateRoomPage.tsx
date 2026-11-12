@@ -81,7 +81,7 @@ export const CreateRoomPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 text-xs text-secondaryText">
               <div className="flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5 text-presentYellow" />
-                <span>3-Minute Timer</span>
+                <span>Custom Round Timer</span>
               </div>
               <div className="flex items-center gap-2">
                 <Grid3X3 className="w-3.5 h-3.5 text-correctGreen" />
@@ -89,7 +89,7 @@ export const CreateRoomPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                <span>6 Max Attempts</span>
+                <span>Multi-Round Battles</span>
               </div>
               <div className="flex items-center gap-2">
                 <Users className="w-3.5 h-3.5 text-purple-400" />

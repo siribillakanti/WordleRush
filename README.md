@@ -23,7 +23,10 @@ WordleRush is a responsive, real-time multiplayer word guessing web application 
   - Tie-breakers: Total Score → Words Solved → Lowest Total Attempts → Earliest Completion Time.
 - **Live Leaderboard:** Real-time updates without leaking guesses or secret words to competitors.
 - **Session Reconnection:** Persistent player sessions in `localStorage` allowing instant re-attachment after a page refresh or connection drop without losing progress.
-- **Dual Dictionary Word Lists:** Curated 10,875 answer words (everyday vocabulary, regular plurals, irregular plurals, geographical names like PARIS/DELHI, ordinary words that are also brand names) + comprehensive 14,133 allowed guess words (including personal names).
+- **Multi-Round Matches (Phase 2):** Host-configurable round duration (60s, 90s, 120s, 180s, 240s, 300s) and total rounds (1, 2, 3, 5). Fresh secret word submissions for every round with preserved results.
+- **Duplicate Secret Words (Phase 2):** Multiple players can submit the exact same secret word (e.g. `PEONY`). Challenges remain separate and independent without deduplication or word leakage.
+- **Cumulative Leaderboard:** Running cumulative score, words solved, attempts, and rankings tracked across all completed rounds.
+- **Dual Dictionary Word Lists:** Curated 10,826 answer words (everyday vocabulary, regular plurals, irregular plurals, ordinary words that are also brand names) + comprehensive 14,151 allowed guess words (including personal names and geographical proper nouns).
 - **Light & Dark Theme Modes:** CSS variable-based theming with a toggle in the navbar, automatic OS color scheme detection, and `localStorage` persistence.
 - **Wordle 3D Tile-Flip Animation:** Authentic 3D `rotateX` tile-flip keyframes with mid-point color transitions, 100ms staggered column delays, input blocking during flip, and `prefers-reduced-motion` compliance.
 
