@@ -109,6 +109,65 @@ export class RoomManager {
     return this.sessionToPlayer.get(sessionId);
   }
 
+  /**
+   * Resolves the authenticated room and member associated with a connected socket.
+   * Returns null if the socket has not established a room session.
+   */
+  public getAuthenticatedPlayer(socketId: string): { room: Room; member: RoomMember } | null {
+    const mapping = this.socketToPlayer.get(socketId);
+    if (!mapping) return null;
+    const room = this.rooms.get(mapping.roomCode.toUpperCase());
+    if (!room) return null;
+    const member = room.members.get(mapping.playerId);
+    if (!member) return null;
+    return { room, member };
+  }
+
+  /**
+   * Re-associates a reconnecting socket with an existing player session.
+   * Cleans up stale socket mappings and registers the new socket ID.
+   */
+  public reconnectPlayer(socketId: string, roomCodeRaw: string, sessionIdRaw: string): {
+    success: boolean;
+    error?: string;
+    room?: Room;
+    member?: RoomMember;
+  } {
+    if (!roomCodeRaw || !sessionIdRaw) {
+      return { success: false, error: 'Room code and session ID are required.' };
+    }
+    const roomCode = roomCodeRaw.trim().toUpperCase();
+    const room = this.rooms.get(roomCode);
+    if (!room) {
+      return { success: false, error: 'Room not found.' };
+    }
+
+    let matchedMember: RoomMember | undefined;
+    for (const member of room.members.values()) {
+      if (member.sessionId === sessionIdRaw.trim()) {
+        matchedMember = member;
+        break;
+      }
+    }
+
+    if (!matchedMember) {
+      return { success: false, error: 'Session not found in room.' };
+    }
+
+    // Clean up any previous socket mapping for this member
+    if (matchedMember.socketId) {
+      this.socketToPlayer.delete(matchedMember.socketId);
+    }
+
+    // Bind new socket
+    matchedMember.socketId = socketId;
+    matchedMember.connectionStatus = 'ONLINE';
+    this.socketToPlayer.set(socketId, { roomCode, playerId: matchedMember.playerId });
+    this.sessionToPlayer.set(matchedMember.sessionId, { roomCode, playerId: matchedMember.playerId });
+
+    return { success: true, room, member: matchedMember };
+  }
+
   public getPublicRoomState(roomCode: string): PublicRoomState | null {
     const room = this.rooms.get(roomCode.toUpperCase());
     if (!room) return null;
@@ -611,9 +670,12 @@ export class RoomManager {
   /**
    * Handles rematch / play again for the room (starts fresh match from Round 1).
    */
-  public rematch(roomCode: string): { success: boolean; error?: string; room?: PublicRoomState } {
+  public rematch(roomCode: string, hostPlayerId?: string): { success: boolean; error?: string; room?: PublicRoomState } {
     const room = this.rooms.get(roomCode.toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
+    if (hostPlayerId && room.hostPlayerId !== hostPlayerId) {
+      return { success: false, error: 'Only the host can start a rematch.' };
+    }
 
     if (room.timerTimeout) {
       clearTimeout(room.timerTimeout);
